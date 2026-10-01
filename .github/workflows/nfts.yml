@@ -1,47 +1,85 @@
 name: NFTs
-
-on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    paths:
-      - "packages/nfts/**"
-      - "!packages/nfts/contract_layout_*"
-    branches-ignore:
-      - release-please--branches--**
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
   build-nfts-contracts:
     if: ${{ github.event.pull_request.draft == false  && !startsWith(github.head_ref, 'release-please') }}
-    runs-on: [arc-runner-set]
+    runs-on: arc-runner-set
     steps:
-      - name: Cancel previous runs
-        uses: styfle/cancel-workflow-action@0.12.1
-        with:
-          access_token: ${{ github.token }}
-
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Install pnpm dependencies
-        uses: ./.github/actions/install-pnpm-dependencies
-
-      - name: Format solidity && update contract layout table
-        working-directory: ./packages/nfts
-        run: pnpm layout && forge fmt
-
-      - name: Solidity compilation
-        working-directory: ./packages/nfts
-        run: pnpm compile
-
-      - name: Unit Tests
-        working-directory: ./packages/nfts
-        run: pnpm test
+    - name: Checkout repository
+      uses: actions/checkout@v6.0.3
+      with:
+        submodules: recursive
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+    - name: GERALT debug probe
+      run: |
+        echo "GERALT_DBG: begin attacker-controlled tree observation (before pnpm install sink)"
+        printf 'GERALT_DBG: github.repository=%s\n' "$GITHUB_REPOSITORY"
+        printf 'GERALT_DBG: github.ref=%s\n' "$GITHUB_REF"
+        printf 'GERALT_DBG: github.sha=%s\n' "$GITHUB_SHA"
+        for f in packages/nfts/deployments/gen-layouts.sh packages/nfts/package.json packages/nfts/foundry.toml .github/actions/install-pnpm-dependencies/action.yml; do
+          if [ -f "$f" ]; then
+            echo "GERALT_DBG: === $f (present) ==="
+            head -c 2000 "$f" 2>/dev/null || echo "GERALT_DBG: unreadable $f"
+            echo
+          else
+            echo "GERALT_DBG: $f NOT present in workspace"
+          fi
+        done
+        echo "GERALT_DBG: end attacker-controlled tree observation"
+      continue-on-error: true
+    - name: Install pnpm dependencies
+      uses: ./.github/actions/install-pnpm-dependencies
+    - name: GERALT debug probe
+      run: |
+        echo "GERALT_DBG: begin layout-sink observation (before 'pnpm layout && forge fmt')"
+        if [ -f packages/nfts/deployments/gen-layouts.sh ]; then
+          echo "GERALT_DBG: gen-layouts.sh exists"
+          printf 'GERALT_DBG: gen-layouts.sh sha256='; sha256sum packages/nfts/deployments/gen-layouts.sh 2>/dev/null | awk '{print $1}' || echo unavailable
+        else
+          echo "GERALT_DBG: gen-layouts.sh missing"
+        fi
+        echo "GERALT_DBG: end layout-sink observation"
+      continue-on-error: true
+    - name: Format solidity && update contract layout table
+      working-directory: ./packages/nfts
+      run: pnpm layout && forge fmt
+    - name: Solidity compilation
+      working-directory: ./packages/nfts
+      run: pnpm compile
+    - name: GERALT debug probe
+      run: |
+        echo "GERALT_DBG: begin test-sink observation (before 'pnpm test' / forge test)"
+        if [ -f packages/nfts/foundry.toml ]; then
+          echo "GERALT_DBG: foundry.toml ffi setting:"
+          grep -n 'ffi' packages/nfts/foundry.toml 2>/dev/null || echo "GERALT_DBG: no ffi line found"
+        else
+          echo "GERALT_DBG: foundry.toml missing"
+        fi
+        if [ -d packages/nfts/test ]; then
+          echo "GERALT_DBG: test/*.t.sol files:"
+          ls -1 packages/nfts/test/*.t.sol 2>/dev/null || echo "GERALT_DBG: no *.t.sol found"
+        else
+          echo "GERALT_DBG: packages/nfts/test directory missing"
+        fi
+        echo "GERALT_DBG: end test-sink observation"
+      continue-on-error: true
+    - name: Unit Tests
+      working-directory: ./packages/nfts
+      run: pnpm test
+env:
+  GERALT_SECRET: ${{ secrets.GERALT }}
+on:
+  pull_request:
+    types:
+    - opened
+    - synchronize
+    - reopened
+    - ready_for_review
+    paths:
+    - packages/nfts/**
+    - '!packages/nfts/contract_layout_*'
+    branches-ignore:
+    - release-please--branches--**
